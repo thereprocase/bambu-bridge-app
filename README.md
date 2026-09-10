@@ -9,6 +9,24 @@ Install it as an update to preserve your saved connection and printer settings.
 
 > Independent community software. Not affiliated with or endorsed by Bambu Lab.
 
+## Secure local pairing preview
+
+**[Android 0.19.0 preview](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.19.0)**
+adds QR pairing with Bridge 0.2.0. In Settings, choose **Pair with QR code**, scan
+the code displayed by your bridge installer, and name your phone. Local API,
+camera, live status and the embedded viewer use encrypted connections that
+verify the bridge's paired identity. No domain, VPN or certificate installation
+is needed for local access. An HTTPS Tailscale address is optional for remote use.
+
+See the [pairing and recovery guide](https://github.com/thereprocase/bambu-bridge/blob/feature/local-pairing/docs/LOCAL-PAIRING.md).
+Existing manual HTTP connections remain available under **Manual setup / compatibility**.
+Paired credentials cannot fall back to HTTP. Disconnecting a paired phone in
+Settings revokes its credential; old manual settings remain stored separately.
+QR decoding is offline, uses ZXing, and does not save camera images.
+
+This preview has automated API, lifecycle and native TLS tests. Physical-phone
+QR scanning and paired WebView acceptance are pending; v0.18.3 remains the stable release.
+
 Bambu Bridge is a small server you run on your own machine (a home server, a
 Raspberry Pi, a spare PC) that talks to your Bambu Lab P1S over your LAN. This
 Android app is the front end: it connects to *your* bridge — never to the

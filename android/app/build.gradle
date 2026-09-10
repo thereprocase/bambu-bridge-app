@@ -93,8 +93,8 @@ android {
         applicationId 'com.anonymous.bambubridgeapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 22
-        versionName "0.18.3"
+        versionCode 23
+        versionName "0.19.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -108,7 +108,7 @@ android {
         release {
             // Credentials come from ~/.gradle/gradle.properties (RELEASE_STORE_PASSWORD,
             // RELEASE_KEY_PASSWORD) or from environment variables of the same names.
-            // The keystore file itself is gitignored — see docs/BUILDING.md.
+            // The keystore file itself is gitignored â€” see docs/BUILDING.md.
             storeFile file('release.keystore')
             storePassword (findProperty('RELEASE_STORE_PASSWORD') ?: System.getenv('RELEASE_STORE_PASSWORD'))
             keyAlias (findProperty('RELEASE_KEY_ALIAS') ?: System.getenv('RELEASE_KEY_ALIAS') ?: 'bambu-bridge')
@@ -161,6 +161,10 @@ android {
 }
 
 dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

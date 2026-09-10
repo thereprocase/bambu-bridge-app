@@ -21,7 +21,7 @@
 import { Link } from "expo-router";
 import * as Network from "expo-network";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { request, requestExact } from "../src/api/client";
 import { prefixOf, resetEndpointCache, resolveEndpoint } from "../src/api/endpoint";
@@ -48,6 +48,9 @@ export default function SettingsScreen() {
   const baseUrlLan = useBridgeStore((s) => s.baseUrlLan);
   const savedNetworks = useBridgeStore((s) => s.savedNetworks);
   const bearer = useBridgeStore((s) => s.bearer);
+  const pairing = useBridgeStore((s) => s.pairing);
+  const [manual, setManual] = useState(!!baseUrl);
+  const [remoteInput, setRemoteInput] = useState(pairing?.remoteUrl ?? "");
   const health = useBridgeStore((s) => s.health);
   const setBaseUrl = useBridgeStore((s) => s.setBaseUrl);
   const setBaseUrlLan = useBridgeStore((s) => s.setBaseUrlLan);
@@ -234,6 +237,46 @@ export default function SettingsScreen() {
     >
       {/* Bridge connection ------------------------------------------------ */}
       <Surface padded style={{ gap: space.md }}>
+        <Text style={[type.h1, { color: c.text }]}>{pairing ? "Securely paired" : "Connect your bridge"}</Text>
+        <Text style={[type.body, { color: c.muted }]}>
+          {pairing ? `This phone is paired as ${pairing.name}. Local connections are encrypted and verify your bridge's identity.`
+            : "Scan the code from your bridge installer to connect securely over home Wi-Fi."}
+        </Text>
+        {!pairing && <>
+          <Link href="/pair" asChild><Button label="Pair with QR code" onPress={() => {}} fullWidth /></Link>
+          <Button label={manual ? "Hide manual setup" : "Manual setup / compatibility"} variant="secondary"
+            onPress={() => setManual(!manual)} fullWidth />
+        </>}
+        {pairing && <>
+          <Button label="Check connection" onPress={probe} loading={probing} fullWidth />
+          <Text style={[type.small, { color: c.muted }]}>{healthLabel}{pathSuffix}</Text>
+          <Field label="Remote HTTPS address (optional)" value={remoteInput} onChangeText={setRemoteInput}
+            keyboardType="url" autoCorrect={false} autoCapitalize="none"
+            hint="Add your bridge's Tailscale HTTPS address for access away from home. Include /api/v1." />
+          <Button label="Save remote address" variant="secondary" onPress={async () => {
+            try {
+              await useBridgeStore.getState().setPairedRemote(remoteInput);
+              resetEndpointCache(); showToast("Remote address saved", { severity: "success" });
+            } catch { showToast("Couldn't save. Use a valid HTTPS address ending in /api/v1.", { severity: "danger" }); }
+          }} fullWidth />
+          <Button label="Disconnect and revoke this phone" variant="secondary" onPress={async () => {
+            try {
+              await request("/pairing/self", { method: "DELETE" });
+              await useBridgeStore.getState().forgetPairing(); resetEndpointCache();
+              showToast("Phone disconnected and access revoked", { severity: "success" });
+            } catch { showToast("Connect to your bridge to revoke this phone, then try again.", { severity: "danger" }); }
+          }} fullWidth />
+          <Button label="Forget local pairing" variant="secondary" onPress={() => Alert.alert(
+            "Forget pairing on this phone?",
+            "This removes the saved pairing and restores your previous manual settings. If the bridge is unreachable, revoke this phone on the bridge separately.",
+            [{ text: "Cancel", style: "cancel" }, { text: "Forget", style: "destructive", onPress: async () => {
+              try { await useBridgeStore.getState().forgetPairing(); resetEndpointCache(); }
+              catch { showToast("Couldn't remove pairing. Unlock your phone and try again.", { severity: "danger" }); }
+            } }])} fullWidth />
+        </>}
+      </Surface>
+      {!pairing && manual && <>
+      <Surface padded style={{ gap: space.md }}>
         <Text style={[type.h1, { color: c.text }]}>Bridge</Text>
         <Text style={[type.small, { color: c.muted }]}>
           Where your Bambu Bridge server is reachable. The remote (Tailscale)
@@ -372,6 +415,7 @@ export default function SettingsScreen() {
         )}
       </Surface>
 
+      </>}
       {/* Printers --------------------------------------------------------- */}
       <Surface padded style={{ gap: space.md }}>
         <Text style={[type.h1, { color: c.text }]}>Printers</Text>

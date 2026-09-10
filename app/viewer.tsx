@@ -21,6 +21,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-rou
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, BackHandler, Text, View } from "react-native";
 import WebView from "react-native-webview";
+import { PairedViewer } from "../src/pairing/PairedViewer";
 
 import { notifyRequestFailed } from "../src/api/endpoint";
 import { buildViewerUrl, isViewerNavigationAllowed, safeVizTimings } from "../src/api/viewer";
@@ -48,6 +49,7 @@ export default function ViewerScreen() {
   const baseUrl = useBridgeStore((s) => s.baseUrl);
   const baseUrlLan = useBridgeStore((s) => s.baseUrlLan);
   const bearer = useBridgeStore((s) => s.bearer);
+  const pairing = useBridgeStore((s) => s.pairing);
 
   // URL is resolved async (the base URL comes from the LAN/Tailscale resolver),
   // so we hold three states: resolving → ready(uri) → unconfigured(null).
@@ -214,7 +216,15 @@ export default function ViewerScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: VIEWER_BG }}>
       {header}
-      <WebView
+      {pairing ? <PairedViewer key={reloadKey} uri={uri}
+        style={{ flex: 1, backgroundColor: VIEWER_BG }}
+        onMessage={handleWebViewMessage}
+        onError={() => {
+          setLoadError("Couldn't securely load the viewer. Check the connection or pair the bridge again.");
+          qaLog("viewer.state", { state: "error" });
+        }}
+        onLoad={() => { if (!vizState) setVizState("ready"); }}
+      /> : <WebView
         key={reloadKey}
         source={{ uri }}
         style={{ flex: 1, backgroundColor: VIEWER_BG }}
@@ -260,7 +270,7 @@ export default function ViewerScreen() {
           </View>
         )}
         startInLoadingState
-      />
+      />}
 
       {/* Viz-state loading overlay: shown while the page has signaled "loading"
           (viz.state postMessage) but not yet "ready". Dismissed as soon as the
