@@ -9,12 +9,15 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 
 import { BridgeError } from "../../src/api/errors";
 import { listFiles, type RemoteFile } from "../../src/api/files";
 import { qaLog } from "../../src/lib/qalog";
-import { canStartStoredPrint, submitPrint } from "../../src/api/jobs";
+import { canStartStoredPrint, getStartOperation, getActiveStart, submitPrint, type StartOperation } from "../../src/api/jobs";
+import { beginIntent, readIntent, recordOperation, startMessage } from "../../src/store/startIntent";
+import { useBridgeStore } from "../../src/store/bridge";
 import { Button } from "../../src/components/Button";
 import { Surface } from "../../src/components/Surface";
 import { useToastStore } from "../../src/components/Toast";
@@ -38,7 +41,13 @@ export default function PrintScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const submissionActive = useRef(false);
-  const canPrint = canStartStoredPrint(live?.snapshot ?? null, live?.status === "open");
+  const focused = useIsFocused();
+  const scope = useBridgeStore((s) => s.pairing?.spki ?? s.baseUrl);
+  const [operation, setOperation] = useState<StartOperation | null>(null);
+  const [startBlocked, setStartBlocked] = useState(true);
+  const [startNotice, setStartNotice] = useState<string | null>(null);
+  const [recheck, setRecheck] = useState(0);
+  const canPrint = !startBlocked && canStartStoredPrint(live?.snapshot ?? null, live?.status === "open");
   const [pickedSlot, setPickedSlot] = useState<number | null>(null);
 
   async function refresh() {
@@ -66,21 +75,71 @@ export default function PrintScreen() {
   }
 
   useEffect(() => {
-    refresh();
+    if (focused && AppState.currentState === "active") refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, focused]);
+
+  useEffect(() => {
+    setStartBlocked(true);
+    setOperation(null);
+    setStartNotice(null);
+    if (!focused || !selectedId) return;
+    let disposed = false;
+    let busy = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function check() {
+      if (disposed || busy || AppState.currentState !== "active") return;
+      busy = true;
+      let again = false;
+      try {
+        const intent = readIntent(scope, selectedId!);
+        const local = intent ? await getStartOperation(intent.operation_id) : null;
+        if (disposed || AppState.currentState !== "active") return;
+        if (local) recordOperation(scope, local);
+        const active = await getActiveStart(selectedId!);
+        if (disposed) return;
+        if (readIntent(scope, selectedId!)?.operation_id !== intent?.operation_id) {
+          throw new Error("Request changed while checking");
+        }
+        const latest = active ?? local;
+        setOperation(latest);
+        setStartNotice(latest ? startMessage(latest) : null);
+        setStartBlocked(!!active || (!!intent && local?.holds_printer !== 0));
+        again = !!latest?.holds_printer && latest.state !== "outcome_unknown";
+      } catch {
+        if (!disposed) {
+          setStartBlocked(true);
+          setStartNotice(startMessage());
+        }
+      } finally {
+        busy = false;
+        // Never overlap reads or leave a timer running on a hidden screen.
+        if (!disposed && again && AppState.currentState === "active") {
+          timer = setTimeout(check, 2000);
+        }
+      }
+    }
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (timer) clearTimeout(timer);
+      if (state === "active") void check();
+    });
+    void check();
+    return () => { disposed = true; if (timer) clearTimeout(timer); subscription.remove(); };
+  }, [scope, selectedId, focused, recheck]);
 
   async function submit(f: RemoteFile) {
     if (!selectedId || !canPrint || submissionActive.current) return;
     submissionActive.current = true;
     setSubmitting(f.name);
+    setStartBlocked(true);
     try {
-      const res = await submitPrint({
-        printer_id: selectedId,
-        filename: f.name,
-        ams_mapping: pickedSlot != null ? [pickedSlot] : undefined,
-      });
-      showToast(`Job ${res.job_id} submitted`, { severity: "success" });
+      const intent = beginIntent(scope, selectedId, f.name,
+        pickedSlot != null ? [pickedSlot] : undefined);
+      const res = await submitPrint(intent);
+      recordOperation(scope, res);
+      setOperation(res);
+      setStartNotice(startMessage(res));
+      showToast("Request accepted; waiting for printer confirmation", { severity: "success" });
     } catch (e) {
       showToast(
         e instanceof BridgeError ? e.envelope.message : String(e),
@@ -89,6 +148,24 @@ export default function PrintScreen() {
     } finally {
       submissionActive.current = false;
       setSubmitting(null);
+      setRecheck((n) => n + 1);
+    }
+  }
+
+  async function retrySameRequest() {
+    if (!selectedId || submissionActive.current ||
+        !canStartStoredPrint(live?.snapshot ?? null, live?.status === "open")) return;
+    submissionActive.current = true;
+    try {
+      const intent = readIntent(scope, selectedId);
+      if (!intent) return;
+      const result = await submitPrint(intent);
+      recordOperation(scope, result);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not confirm request", { severity: "danger" });
+    } finally {
+      submissionActive.current = false;
+      setRecheck((n) => n + 1);
     }
   }
 
@@ -106,6 +183,15 @@ export default function PrintScreen() {
       contentContainerStyle={{ padding: space.lg, gap: space.lg }}
       refreshControl={<RefreshControl refreshing={loading} tintColor={c.accent} onRefresh={refresh} />}
     >
+      {startNotice && (
+        <Surface padded style={{ gap: space.sm }}>
+          <Text style={[type.body, { color: c.text }]}>{startNotice}</Text>
+          {operation?.reason && <Text style={[type.small, { color: c.muted }]}>{operation.reason}</Text>}
+          <Button label="Check request status" onPress={() => setRecheck((n) => n + 1)} />
+          {!operation && <Button label="Resend same request" onPress={retrySameRequest}
+            disabled={!canStartStoredPrint(live?.snapshot ?? null, live?.status === "open")} />}
+        </Surface>
+      )}
       {/* AMS slot picker --------------------------------------------------- */}
       {view.ams.length > 0 && (
         <Surface padded style={{ gap: space.sm }}>
@@ -148,7 +234,7 @@ export default function PrintScreen() {
         {sortedFiles(files, activeJobName).map((f, idx) => {
           const fileBase = basename(f.name);
           const activeBase = activeJobName != null ? basename(activeJobName) : "";
-          const isPrinting = activeJobName != null && (
+          const isPrinting = ["preparing", "printing", "paused"].includes(String(live?.snapshot?.phase)) && activeJobName != null && (
             fileBase === activeBase ||
             (stem(activeBase).length > 0 && stem(fileBase) === stem(activeBase))
           );
@@ -188,7 +274,7 @@ export default function PrintScreen() {
                 )}
               </View>
               <Button
-                label={submitting === f.name ? "Submitting…" : "Print"}
+                label={submitting === f.name ? "Sending request…" : "Print"}
                 onPress={() => submit(f)}
                 loading={submitting === f.name}
                 disabled={!canPrint || submitting !== null}
