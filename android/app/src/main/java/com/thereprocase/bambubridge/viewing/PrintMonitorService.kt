@@ -56,6 +56,7 @@ class PrintMonitorService : Service() {
         }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (ViewingModule.homeAssistantAlerts(this)) { stopMonitoring(); return START_NOT_STICKY }
         if (intent?.action == STOP) { stopMonitoring(); return START_NOT_STICKY }
         if (running) return START_STICKY
         val notification = notice("Connecting to your printer", true)

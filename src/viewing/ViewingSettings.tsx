@@ -15,7 +15,7 @@ export function ViewingSettings() {
       <Text style={[type.body, { flex: 1, color: c.text }]}>Keep screen awake in fullscreen camera and 3D</Text>
       <Switch accessibilityLabel="Keep screen awake while viewing" value={awake} onValueChange={setAwake} />
     </View>
-    <Text style={[type.small, { color: c.muted }]}>Camera streams at the printer’s available rate. Fullscreen views rotate with your phone; pinch to zoom the camera. Enable print alerts on the Status screen.</Text>
+    <Text style={[type.small, { color: c.muted }]}>Camera streams while visible. Fullscreen views rotate with your phone; pinch to zoom the camera. Choose app monitoring or Home Assistant alerts on the Status screen.</Text>
     <Link href="/connection" asChild><Button label="Check connection" onPress={() => {}} fullWidth /></Link>
   </Surface>;
 }

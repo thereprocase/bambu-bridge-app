@@ -14,6 +14,11 @@ import com.facebook.react.bridge.*
 import org.json.JSONObject
 
 class ViewingModule(private val context: ReactApplicationContext): ReactContextBaseJavaModule(context), LifecycleEventListener {
+    companion object {
+        fun homeAssistantAlerts(context: android.content.Context): Boolean =
+            context.getSharedPreferences("alert-delivery", android.content.Context.MODE_PRIVATE)
+                .getBoolean("home-assistant", false)
+    }
     private var awake = false
     init { context.addLifecycleEventListener(this) }
     override fun getName() = "BridgeViewing"
@@ -32,6 +37,7 @@ class ViewingModule(private val context: ReactApplicationContext): ReactContextB
     }
     @ReactMethod fun startMonitor(encoded: String, promise: Promise) {
         try {
+            check(!homeAssistantAlerts(context))
             require(context.currentActivity != null && encoded.length < 16384)
             require(context.getSystemService(NotificationManager::class.java).areNotificationsEnabled())
             if (Build.VERSION.SDK_INT >= 33) require(context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
@@ -58,11 +64,23 @@ class ViewingModule(private val context: ReactApplicationContext): ReactContextB
         val power = context.getSystemService(PowerManager::class.java)
         promise.resolve(Arguments.createMap().apply {
             putBoolean("running", PrintMonitorService.running)
+            putBoolean("homeAssistant", homeAssistantAlerts(context))
             putString("printer", PrintMonitorService.printer)
             putString("state", PrintMonitorService.status)
             putBoolean("alertsAllowed", context.getSystemService(NotificationManager::class.java).areNotificationsEnabled())
             putBoolean("batteryRestricted", !power.isIgnoringBatteryOptimizations(context.packageName))
         })
+    }
+    @ReactMethod fun setHomeAssistantAlerts(enabled: Boolean, promise: Promise) {
+        try {
+            check(context.getSharedPreferences("alert-delivery", android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean("home-assistant", enabled).commit())
+            if (enabled) {
+                MonitorStorage.clear(context)
+                context.stopService(Intent(context, PrintMonitorService::class.java))
+            }
+            promise.resolve(null)
+        } catch (_: Exception) { promise.reject("ALERT_DELIVERY", "Couldn't change alert delivery. Try again.") }
     }
     @ReactMethod fun batterySettings() {
         context.currentActivity?.let { activity ->

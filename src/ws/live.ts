@@ -20,6 +20,7 @@
  */
 
 import { qaLog } from "../lib/qalog";
+import { AppState } from "react-native";
 import { PairedSocket } from "../pairing/native";
 import { notifyRequestFailed, notifyRequestSucceeded, resolveBaseUrl, sameOrigin } from "../api/endpoint";
 import { useBridgeStore } from "../store/bridge";
@@ -200,12 +201,14 @@ export class LiveConnection {
 
   private scheduleReconnect() {
     if (this.stopped || this.reconnectTimer) return;
+    if (AppState.currentState !== "active") { this.stop(); return; }
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.attempt, 5));
     this.attempt += 1;
     qaLog("ws.state", { status: "reconnect_scheduled", attempt: this.attempt, delay_ms: delay });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      if (AppState.currentState === "active") this.connect();
+      else this.stop();
     }, delay);
   }
 }

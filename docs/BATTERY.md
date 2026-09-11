@@ -1,5 +1,33 @@
 # Battery work and acceptance
 
+## Home Assistant delivery and fast return
+
+Choose **Use Home Assistant alerts** on the Status screen after configuring and
+testing HA notifications. This persists the choice natively, clears the native
+monitor's saved session and stops its service. A sticky service restart also
+honors the choice. It does not configure HA or verify notification delivery.
+
+When the app is hidden, the camera stops immediately and the monitor-controls
+UI stops polling. An existing UI status socket gets a 60-second grace period for
+quick app switches, but failed sockets do not reconnect while hidden. A network
+change closes the old socket immediately. After the grace period the socket
+closes; the last snapshot remains cached for immediate display on return.
+Android may suspend JS timers, so resume also checks elapsed wall time before
+reusing a connection. No wake lock or foreground service is used to enforce the
+grace timer. Controls still require a fresh live snapshot after reconnect.
+
+On a server advertising viewer lifecycle version 1, a fully loaded 3D view can
+retain its geometry and camera position for the same grace period while stopping
+polling and animation immediately. Loading/older viewers still unload when
+hidden. Configuration/credential/network changes invalidate the warm view.
+After process eviction or grace expiry the viewer reloads normally. Warm resume
+requires the companion server viewer change; it is not available on older pages.
+
+Finite user-initiated HTTP operations retain their existing timeouts; this is not
+a claim that every in-flight request disappears the instant the app is hidden.
+HA's own server-side integration can poll, but that work does not run on this
+phone. No Firebase project or provider is added to Beluga.
+
 ## Findings and scope
 
 An operator phone's battery history attributed approximately 108 minutes of CPU

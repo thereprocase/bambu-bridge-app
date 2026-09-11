@@ -33,6 +33,7 @@ import { useTheme } from "../src/theme/ThemeProvider";
 import { useViewingScreen } from "../src/viewing/screen";
 import { useViewingStore } from "../src/viewing/state";
 import { viewerFailureReducer } from "../src/viewing/viewerFailure";
+import { BACKGROUND_GRACE_MS } from "../src/viewing/lifecycle";
 
 // Matches the viewer canvas so there's no white flash before WebGL paints.
 const VIEWER_BG = "#111113";
@@ -76,6 +77,12 @@ export default function ViewerScreen() {
   // Reload nonce — bumping it remounts the WebView for a clean retry even if
   // the ref reload path is unavailable mid-error.
   const [reloadKey, setReloadKey] = useState(0);
+  const webView = useRef<WebView>(null);
+  const loadedScope = useRef<string | null>(null);
+  const hiddenAt = useRef<number | null>(null);
+  const [warmScope, setWarmScope] = useState<string | null>(null);
+  const scope = JSON.stringify([printerId, reloadKey, baseUrl, baseUrlLan, bearer, pairing, networkRevision]);
+  const warmSupported = warmScope === scope;
   // Viewer page may drive loading/ready/error via viz.state postMessage.
   // null = no viz.state received yet (fall back to onLoad / onError behavior).
   const [vizState, setVizState] = useState<"loading" | "ready" | "error" | null>(null);
@@ -89,6 +96,23 @@ export default function ViewerScreen() {
     autoAttempts.current = 0;
     return () => { if (autoRetry.current) clearTimeout(autoRetry.current); autoRetry.current = null; };
   }, [printerId, networkRevision, bearer, active]);
+
+  useEffect(() => {
+    if (!warmSupported) return;
+    webView.current?.injectJavaScript(`window.__viz && window.__viz.setActive(${active}); true;`);
+    if (active) {
+      if (hiddenAt.current !== null && Date.now() - hiddenAt.current >= BACKGROUND_GRACE_MS) {
+        loadedScope.current = null; setUri(null); setWarmScope(null);
+      }
+      hiddenAt.current = null;
+      return;
+    }
+    hiddenAt.current = Date.now();
+    const expiry = setTimeout(() => {
+      loadedScope.current = null; setUri(null); setWarmScope(null);
+    }, BACKGROUND_GRACE_MS);
+    return () => clearTimeout(expiry);
+  }, [active, warmSupported]);
 
   function resetLoadError() {
     fatalFailure.current = false;
@@ -105,6 +129,7 @@ export default function ViewerScreen() {
   }
 
   function recoverNetwork() {
+    if (!active) return;
     if (fatalFailure.current) return;
     networkFailed.current = true;
     if (autoRetry.current || autoAttempts.current >= 3) return;
@@ -139,7 +164,11 @@ export default function ViewerScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!active) { setUri(null); setResolving(false); return; }
+    if (!active) {
+      if (!warmSupported) { loadedScope.current = null; setUri(null); }
+      setResolving(false); return;
+    }
+    if (loadedScope.current === scope) return;
     if (!printerId) {
       setResolving(false);
       // No printer param — treat as a configuration error state.
@@ -155,6 +184,7 @@ export default function ViewerScreen() {
     buildViewerUrl(printerId)
       .then((u) => {
         if (!cancelled) {
+          loadedScope.current = scope;
           setUri(u);
           setResolving(false);
           // URL resolved: viewer transitions to ready (WebView will load).
@@ -172,7 +202,7 @@ export default function ViewerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [printerId, reloadKey, baseUrl, baseUrlLan, bearer, pairing, networkRevision, active]);
+  }, [printerId, reloadKey, baseUrl, baseUrlLan, bearer, pairing, networkRevision, active, scope, warmSupported]);
 
   function retry() {
     autoAttempts.current = 0;
@@ -210,6 +240,7 @@ export default function ViewerScreen() {
     } else if (msgType === "viz.state") {
       const state = msg.state;
       if (state === "loading" || state === "ready" || state === "error") {
+        if (state === "ready" && msg.lifecycle === 1) setWarmScope(scope);
         if (state === "ready") {
           if (!fatalFailure.current) {
             autoAttempts.current = 0;
@@ -240,7 +271,7 @@ export default function ViewerScreen() {
     />
   );
 
-  if (!active) return <View style={{ flex: 1, backgroundColor: VIEWER_BG }}>{header}</View>;
+  if (!active && !warmSupported) return <View style={{ flex: 1, backgroundColor: VIEWER_BG }}>{header}</View>;
 
   // Bad/lost param, or no base/bearer configured → explain, don't show a blank
   // WebView. Never claim "unknown".
@@ -282,7 +313,7 @@ export default function ViewerScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: VIEWER_BG }}>
       {header}
-      {pairing ? <PairedViewer key={reloadKey} uri={uri}
+      {pairing ? <PairedViewer key={reloadKey} uri={uri} active={active}
         style={{ flex: 1, backgroundColor: VIEWER_BG }}
         onMessage={handleWebViewMessage}
         onError={(event) => {
@@ -293,6 +324,7 @@ export default function ViewerScreen() {
         }}
         onLoad={() => { if (!vizState) setVizState("ready"); }}
       /> : <WebView
+        ref={webView}
         key={reloadKey}
         source={{ uri }}
         style={{ flex: 1, backgroundColor: VIEWER_BG }}

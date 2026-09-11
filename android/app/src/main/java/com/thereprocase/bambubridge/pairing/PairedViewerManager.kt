@@ -26,6 +26,10 @@ class PairedViewerManager : SimpleViewManager<PairedViewer>() {
     @ReactProp(name = "uri") fun setUri(view: PairedViewer, uri: String?) {
         if (uri != null) view.open(uri)
     }
+    @ReactProp(name = "active", defaultBoolean = true) fun setActive(view: PairedViewer, active: Boolean) {
+        view.evaluateJavascript("window.__viz && window.__viz.setActive && window.__viz.setActive($active);", null)
+        if (active) view.onResume() else view.onPause()
+    }
     override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> = mutableMapOf(
         "topPairMessage" to mapOf("registrationName" to "onMessage"),
         "topPairError" to mapOf("registrationName" to "onError"),
@@ -108,6 +112,7 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
         }
     }
     fun open(uri: String) {
+        if (initial == uri) return
         try {
             val current = SecureBridgeModule.active ?: throw SecurityException()
             val url = uri.toHttpUrl()
