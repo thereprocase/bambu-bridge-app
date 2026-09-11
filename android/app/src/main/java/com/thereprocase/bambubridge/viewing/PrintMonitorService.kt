@@ -33,8 +33,12 @@ class PrintMonitorService : Service() {
     private var generation = 0
     private var attempts = 0
     private var useAlternate = false
-    private var lastMessage = 0L
-    private var opened = 0L
+    private val network = MonitorNetwork<Network>()
+    private val watchdog = MonitorWatchdog(SystemClock::elapsedRealtime, { delay, block ->
+        val task = worker.schedule({ block() }, delay, TimeUnit.MILLISECONDS)
+        val cancel: () -> Unit = { task.cancel(false); Unit }
+        cancel
+    }, { fail("reconnecting", true) })
     private var snapshot: JSONObject? = null
     private val tracker = AlertTracker()
     private var lastNotice = ""
@@ -69,19 +73,23 @@ class PrintMonitorService : Service() {
                     tracker.armed = it.optBoolean("armed")
                     tracker.errors = it.optJSONArray("errors")?.let { a -> (0 until a.length()).map { i -> a.getString(i) }.toSet() } ?: emptySet()
                 }
-                connect()
-                worker.scheduleAtFixedRate({
-                    if (socket != null && (snapshot == null && SystemClock.elapsedRealtime()-opened > 15_000 ||
-                            SystemClock.elapsedRealtime()-lastMessage > 65_000)) {
-                        fail("reconnecting", true)
-                    }
-                }, 5, 5, TimeUnit.SECONDS)
+                val connectivity = getSystemService(ConnectivityManager::class.java)
+                updateNotice("Waiting for network · alerts delayed", "reconnecting")
                 val callback = object: ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) { dispatch { attempts=0; useAlternate=false; connect() } }
-                    override fun onLost(network: Network) { dispatch { fail("reconnecting", true) } }
+                    override fun onAvailable(network: Network) { dispatch {
+                        // Registration reports the current network too; don't replace a healthy socket.
+                        if (this@PrintMonitorService.network.available(network)) {
+                            attempts=0; useAlternate=false; connect()
+                        }
+                    } }
+                    override fun onLost(network: Network) { dispatch {
+                        if (this@PrintMonitorService.network.lost(network)) {
+                            fail("reconnecting", true)
+                        }
+                    } }
                 }
                 networkCallback = callback
-                getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(callback)
+                connectivity.registerDefaultNetworkCallback(callback)
             } catch (_: Exception) { fail("configuration", false) }
         }
         return START_STICKY
@@ -89,23 +97,27 @@ class PrintMonitorService : Service() {
     private fun connect() {
         val current = ++generation
         reconnect?.cancel(false); reconnect = null
+        watchdog.stop()
         socket?.cancel(); socket = null; snapshot = null
         val transport = transport ?: return
         val base = if (useAlternate) transport.alternate ?: transport.primary else transport.primary
         val url = transport.url(base, "status")
-        opened = SystemClock.elapsedRealtime(); lastMessage = opened
         updateNotice("Connecting to your printer", "connecting")
-        socket = transport.client(url).newBuilder().pingInterval(25, TimeUnit.SECONDS).build()
+        watchdog.start()
+        // The bridge sends application pings after 30 seconds of silence.
+        // Answer those; a second transport-level heartbeat only adds radio traffic.
+        socket = transport.client(url)
             .newWebSocket(transport.request(url), object: WebSocketListener() {
                 override fun onMessage(webSocket: WebSocket, text: String) { dispatch {
                     if (generation != current) return@dispatch
                     if (text.length > 2*1024*1024) { fail("unavailable", true); return@dispatch }
                     try {
-                        val message = JSONObject(text); lastMessage = SystemClock.elapsedRealtime()
+                        val message = JSONObject(text)
+                        watchdog.received()
                         when (message.optString("type")) {
                             "hello" -> if (message.optInt("protocol_version") != 1) fail("incompatible", false)
                             "ping" -> webSocket.send("{\"type\":\"pong\"}")
-                            "snapshot" -> { snapshot = message.getJSONObject("data"); consumeSnapshot() }
+                            "snapshot" -> { snapshot = message.getJSONObject("data"); watchdog.received(true); consumeSnapshot() }
                             "delta" -> snapshot?.let { merge(it, message.getJSONObject("data")); consumeSnapshot() }
                         }
                     } catch (_: Exception) { fail("unavailable", true) }
@@ -165,6 +177,7 @@ class PrintMonitorService : Service() {
         updateNotice(label, "connected")
     }
     private fun fail(state: String, retry: Boolean) {
+        watchdog.stop()
         ++generation; socket?.cancel(); socket = null
         reconnect?.cancel(false); reconnect = null
         updateNotice(if (retry) "Connection lost · reconnecting; alerts delayed" else "Print monitor stopped · check connection", state)
@@ -175,6 +188,11 @@ class PrintMonitorService : Service() {
                 else -> "Print alerts stopped · check the app"
             })
             stopMonitoring(); return
+        }
+        // No periodic connection attempts without a route. onAvailable resumes immediately.
+        if (!network.canConnect) {
+            updateNotice("No network · alerts delayed", "reconnecting")
+            return
         }
         useAlternate = !useAlternate
         val delay = minOf(30L, 1L shl minOf(attempts++, 5))

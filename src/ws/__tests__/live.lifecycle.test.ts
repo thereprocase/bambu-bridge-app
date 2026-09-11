@@ -53,9 +53,12 @@ it("waits for a valid fresh snapshot before enabling the live status", async () 
   expect(socket.options).toEqual({ headers: { Authorization: "Bearer synthetic-ws-secret" } });
 });
 
-it("answers server pings and stops its keepalive when closed", async () => {
+it("sends no unsolicited heartbeat, answers server pings, and stays silent after stop", async () => {
   const { conn } = connection(); await flush(); const socket = MockSocket.instances[0]; socket.onopen?.();
-  socket.emit({ type: "snapshot", data: {} }); socket.emit({ type: "ping" });
+  socket.emit({ type: "snapshot", data: {} });
+  await jest.advanceTimersByTimeAsync(30_000);
+  expect(socket.send).not.toHaveBeenCalled();
+  socket.emit({ type: "ping" });
   expect(socket.send).toHaveBeenCalledWith('{"type":"pong"}');
   conn.stop(); socket.send.mockClear(); await jest.advanceTimersByTimeAsync(60_000);
   expect(socket.send).not.toHaveBeenCalled();

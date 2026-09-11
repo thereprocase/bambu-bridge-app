@@ -1,6 +1,6 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
+import { AppState, Text } from "react-native";
 import { Button } from "../components/Button";
 import { Surface } from "../components/Surface";
 import { useTheme } from "../theme/ThemeProvider";
@@ -9,16 +9,21 @@ import { startMonitoring, viewingNative } from "./native";
 export function MonitorControls({ printer }: { printer: string }) {
   const { c, type, space } = useTheme();
   const focused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
   const [status, setStatus] = useState<Awaited<ReturnType<typeof viewingNative.monitorStatus>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    if (!focused) return;
+    const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
+    return () => listener.remove();
+  }, []);
+  useEffect(() => {
+    if (!focused || !foreground) return;
     let cancelled = false;
     const refresh = () => { void viewingNative.monitorStatus().then(value => { if (!cancelled) setStatus(value); }).catch(() => {}); };
     refresh(); const timer = setInterval(refresh, 2000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [focused]);
+  }, [focused, foreground]);
   async function toggle() {
     setBusy(true); setError("");
     try {

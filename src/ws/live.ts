@@ -51,7 +51,6 @@ export class LiveConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotTimer: ReturnType<typeof setTimeout> | null = null;
   private incomingTimer: ReturnType<typeof setTimeout> | null = null;
-  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private printerId: string, private opts: LiveOpts) {}
 
@@ -65,8 +64,7 @@ export class LiveConnection {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.snapshotTimer) clearTimeout(this.snapshotTimer);
     if (this.incomingTimer) clearTimeout(this.incomingTimer);
-    if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
-    this.reconnectTimer = this.snapshotTimer = this.incomingTimer = this.keepaliveTimer = null;
+    this.reconnectTimer = this.snapshotTimer = this.incomingTimer = null;
   }
 
   stop() {
@@ -145,7 +143,6 @@ export class LiveConnection {
       const { baseUrlLan } = useBridgeStore.getState();
       useNetStore.getState().setReach(baseUrlLan && sameOrigin(baseUrl, baseUrlLan) ? "lan" : "remote");
       armIncomingWatchdog();
-      this.keepaliveTimer = setInterval(pong, 30_000);
     };
     socket.onmessage = (ev: { data: unknown }) => {
       if (!current()) return;
