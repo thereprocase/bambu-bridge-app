@@ -33,6 +33,7 @@ import { Surface } from "../src/components/Surface";
 import { useToastStore } from "../src/components/Toast";
 import { useBridgeStore } from "../src/store/bridge";
 import { useTheme } from "../src/theme/ThemeProvider";
+import { ViewingSettings } from "../src/viewing/ViewingSettings";
 
 type ProbeState =
   | { state: "idle" }
@@ -235,6 +236,10 @@ export default function SettingsScreen() {
       style={{ flex: 1, backgroundColor: c.bg }}
       contentContainerStyle={{ padding: space.lg, gap: space.lg }}
     >
+      {baseUrl && bearer && <>
+        <Link href="/(tabs)/status" replace asChild><Button label="Open dashboard" onPress={() => {}} fullWidth /></Link>
+        <ViewingSettings />
+      </>}
       {/* Bridge connection ------------------------------------------------ */}
       <Surface padded style={{ gap: space.md }}>
         <Text style={[type.h1, { color: c.text }]}>{pairing ? "Securely paired" : "Connect your bridge"}</Text>

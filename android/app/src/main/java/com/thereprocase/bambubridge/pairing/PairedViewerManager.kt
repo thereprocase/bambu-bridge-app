@@ -14,6 +14,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.io.FilterInputStream
+import com.thereprocase.bambubridge.viewing.ViewingTransport
 
 /** The self-contained viewer uses GET/fetch polling, not browser WebSockets.
  * Every resource passes through the SAME paired transport as REST and WSS.
@@ -58,10 +59,10 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                handler.cancel(); emit("topPairError")
+                handler.cancel(); emit("topPairError", reason = "identity")
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) emit("topPairError")
+                if (request.isForMainFrame) emit("topPairError", reason = "network")
             }
             override fun onPageFinished(view: WebView, url: String) { emit("topPairLoad") }
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse {
@@ -84,7 +85,7 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
                     val r = response
                     require(r.code !in 300..399)
                     val body = r.body ?: throw IllegalStateException()
-                    if (r.code >= 400) emit("topPairError")
+                    if (r.code >= 400) emit("topPairError", reason = if (r.code in listOf(401,403)) "auth" else "unavailable")
                     val stream = object : FilterInputStream(body.byteStream()) {
                         override fun close() { super.close(); r.close() }
                     }
@@ -96,8 +97,8 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
                                 "style-src 'unsafe-inline'; connect-src 'self'; img-src data:; " +
                                 "base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'"
                         ), stream)
-                } catch (_: Exception) {
-                    response?.close(); emit("topPairError")
+                } catch (e: Exception) {
+                    response?.close(); emit("topPairError", reason = if (e is IllegalArgumentException) "identity" else ViewingTransport.failure(e))
                     return WebResourceResponse("text/plain", "utf-8", 502, "Unavailable",
                         mapOf("Cache-Control" to "no-store"), ByteArrayInputStream("Secure viewer unavailable".toByteArray()))
                 }
@@ -113,13 +114,16 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
             require(!url.queryParameter("token").isNullOrEmpty())
             initial = uri; transport = current
             loadUrl(uri)
-        } catch (_: Exception) { emit("topPairError") }
+        } catch (_: Exception) { emit("topPairError", reason = "identity") }
     }
-    private fun emit(name: String, data: String? = null) {
+    private fun emit(name: String, data: String? = null, reason: String? = null) {
         post {
             UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)?.dispatchEvent(
                 ViewerEvent(UIManagerHelper.getSurfaceId(this), id, name,
-                    Arguments.createMap().apply { if (data != null) putString("data", data) }))
+                    Arguments.createMap().apply {
+                        if (data != null) putString("data", data)
+                        if (reason != null) putString("reason", reason)
+                    }))
         }
     }
 }

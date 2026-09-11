@@ -93,8 +93,16 @@ android {
         applicationId 'com.anonymous.bambubridgeapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "0.19.0"
+        versionCode 24
+        versionName "0.20.0"
+
+        // C++ assertion strings must not embed the builder's private home or checkout path.
+        externalNativeBuild {
+            cmake {
+                cppFlags "-ffile-prefix-map=${System.getProperty('user.home')}=/builder",
+                    "-ffile-prefix-map=${rootDir.parentFile.absolutePath}=/source"
+            }
+        }
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -165,6 +173,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+    testImplementation("org.json:json:20240303")
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

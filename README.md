@@ -2,6 +2,28 @@
 
 The Android companion for the self-hosted [Bambu Bridge](https://github.com/thereprocase/bambu-bridge) printer server.
 
+## Camera and print alerts preview
+
+**[Download Android 0.20.0](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.20.0)**
+adds full-rate camera streaming, fullscreen rotation and zoom, completed-job
+3D viewing, connection checks, and optional background print alerts. Use Bridge
+0.5.0 for the latest camera and viewer improvements. Install over your existing
+app to retain settings and pairing.
+
+| Want to… | Open… |
+|---|---|
+| Watch every available camera frame | Status; tap **Open fullscreen camera** to rotate and zoom |
+| Keep the display awake | Settings → **Keep screen awake** |
+| Inspect the last completed print | Status → **View in 3D**, while job data is available |
+| Receive completion, pause, and error alerts | Status → **Enable print alerts** |
+| Find a connection problem | Settings → **Check connection** |
+
+Print alerts use an opt-in Android foreground service with a persistent status
+notification and a Stop action. Allow the background connection when prompted
+for better delivery during deep sleep. The service uses your own bridge,
+retains verified local TLS pairing, and does not need a cloud push provider.
+See [what changed and the delivery limits](docs/RELEASE-0.20.0.md).
+
 **[Download Android v0.18.3](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.18.3)** · **[Project overview](https://thereprocase.github.io/bambu-bridge/#android)** · **[What changed](docs/RELEASE-0.18.3.md)**
 
 The APK supports ARM64 phones running Android 7 or newer. Use Bambu Bridge 0.1.3.
