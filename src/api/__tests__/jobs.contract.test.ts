@@ -4,19 +4,19 @@ import { request } from "../client";
 jest.mock("../client", () => ({ request: jest.fn() }));
 beforeEach(() => jest.mocked(request).mockReset());
 
-it("starts a stored file through the current queue contract with physical AMS slots", async () => {
-  jest.mocked(request).mockResolvedValueOnce({ id: "queue-1" }).mockResolvedValueOnce({ id: "job-1", state: "queued" });
-  await expect(submitPrint({ printer_id: "synthetic", filename: "part.gcode.3mf", ams_mapping: [4] }))
-    .resolves.toEqual({ job_id: "job-1", state: "queued" });
-  expect(request).toHaveBeenNthCalledWith(1, "/printers/synthetic/queue", { method: "POST",
-    body: { file_path: "/part.gcode.3mf", file_name: "part.gcode.3mf", ams_mapping: [4] } });
-  expect(request).toHaveBeenNthCalledWith(2, "/queue/queue-1/start", { method: "POST", timeoutMs: 60_000 });
+it("starts a stored file with one durable identity and physical AMS slots", async () => {
+  jest.mocked(request).mockResolvedValueOnce({ id: "intent-synthetic", job_id: "job-1", state: "accepted" });
+  await expect(submitPrint({ operation_id: "intent-synthetic", printer_id: "synthetic", filename: "part.gcode.3mf", ams_mapping: [4] }))
+    .resolves.toMatchObject({ job_id: "job-1", state: "accepted" });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledWith("/printers/synthetic/start-operations", { method: "POST",
+    body: { operation_id: "intent-synthetic", file_name: "part.gcode.3mf", ams_mapping: [4] } });
 });
 
-it("retains a queued item after an uncertain start without retrying or deleting it", async () => {
-  jest.mocked(request).mockResolvedValueOnce({ id: "queue-1" }).mockRejectedValueOnce(new Error("response lost"));
-  await expect(submitPrint({ printer_id: "synthetic", filename: "part.gcode.3mf" })).rejects.toThrow("response lost");
-  expect(request).toHaveBeenCalledTimes(2);
+it("does not automatically retry or delete after a lost start response", async () => {
+  jest.mocked(request).mockRejectedValueOnce(new Error("response lost"));
+  await expect(submitPrint({ operation_id: "intent-synthetic", printer_id: "synthetic", filename: "part.gcode.3mf" })).rejects.toThrow("response lost");
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 it("uses the current queue add and delete endpoints", async () => {
@@ -32,9 +32,10 @@ it.each(["printing", "preparing", "paused", "failed", "unknown"])("does not star
   expect(canStartStoredPrint({ phase, session: { connected: true } }, true)).toBe(false);
 });
 it("requires both a fresh socket snapshot and a connected printer", () => {
-  const idle = { phase: "idle", session: { connected: true } };
+  const idle = { phase: "idle", session: { connected: true, last_telemetry_at: new Date().toISOString() } };
   expect(canStartStoredPrint(idle, true)).toBe(true);
   expect(canStartStoredPrint(idle, false)).toBe(false);
   expect(canStartStoredPrint({ phase: "idle", session: { connected: false } }, true)).toBe(false);
   expect(canStartStoredPrint(null, true)).toBe(false);
+  expect(canStartStoredPrint({ ...idle, session: { connected: true } }, true)).toBe(false);
 });
