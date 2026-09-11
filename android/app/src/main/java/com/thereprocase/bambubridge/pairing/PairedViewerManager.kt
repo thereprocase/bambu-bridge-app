@@ -80,7 +80,7 @@ class PairedViewer(private val reactContext: ThemedReactContext) : WebView(react
                     val token = first.queryParameter("token") ?: throw SecurityException()
                     val clean = url.newBuilder().removeAllQueryParameters("token").build()
                     val request = Request.Builder().url(clean).header("Authorization", "Bearer $token").build()
-                    response = current.clientFor(url).newCall(request).execute()
+                    response = current.clientForRequest(url, "GET").newCall(request).execute()
                     require(current === SecureBridgeModule.active)
                     val r = response
                     require(r.code !in 300..399)

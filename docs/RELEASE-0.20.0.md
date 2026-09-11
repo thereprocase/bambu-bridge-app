@@ -18,6 +18,8 @@ ARM64. Bridge 0.5.0 is recommended for camera recovery and faster 3D loading.
 - Network changes and returning to the app refresh the connection selection.
   Camera and live status reconnect; the 3D viewer reloads its route. Failed
   printer commands are never automatically replayed.
+- Paired HTTPS reads recover when an idle pooled connection has closed. Reads
+  retain the same identity checks and redirect restrictions; commands are not retried.
 - Completed and failed jobs can open in 3D while the bridge still has their job
   data. This does not enable print controls or create a permanent model archive.
 

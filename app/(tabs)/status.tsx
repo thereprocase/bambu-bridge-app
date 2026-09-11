@@ -522,4 +522,3 @@ function formatMin(min: number): string {
   const m = Math.round(min % 60);
   return `${h}h ${m}m`;
 }
-

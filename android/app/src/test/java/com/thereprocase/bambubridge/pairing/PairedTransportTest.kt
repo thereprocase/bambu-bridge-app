@@ -6,6 +6,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import okio.ByteString.Companion.toByteString
@@ -20,6 +21,25 @@ class PairedTransportTest {
     private fun server(cert: HeldCertificate): MockWebServer = MockWebServer().apply {
         useHttps(HandshakeCertificates.Builder().heldCertificate(cert).build().sslSocketFactory(), false)
         start()
+    }
+
+    @Test fun readsRecoverAClosedPoolConnectionWithoutEnablingCommandReplay() {
+        val cert = HeldCertificate.Builder().build()
+        server(cert).use { server ->
+            val transport = PairedTransport(server.url("/api/v1").toString(), pin(cert))
+            val url = server.url("/api/v1/printers")
+            val reader = transport.clientForRequest(url, "GET")
+            for (method in listOf("POST", "PUT", "PATCH", "DELETE"))
+                assertFalse(transport.clientForRequest(url, method).retryOnConnectionFailure)
+            assertFalse(reader.followRedirects)
+            assertFalse(reader.followSslRedirects)
+            server.enqueue(MockResponse().setBody("first"))
+            reader.newCall(Request.Builder().url(url).build()).execute().use { assertEquals("first", it.body!!.string()) }
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+            server.enqueue(MockResponse().setBody("recovered"))
+            reader.newCall(Request.Builder().url(url).build()).execute().use { assertEquals("recovered", it.body!!.string()) }
+            transport.close()
+        }
     }
 
     @Test fun pairedIdentityAuthenticatesDespiteNoPublicCaOrDnsName() {

@@ -61,6 +61,10 @@ class PairedTransport(base: String, pin: String, remote: String? = null) {
         throw SecurityException("Unpaired bridge address")
     }
 
+    /** Recover a stale pooled connection only for reads. Commands are never replayed. */
+    fun clientForRequest(url: HttpUrl, method: String): OkHttpClient =
+        clientFor(url).newBuilder().retryOnConnectionFailure(method == "GET").build()
+
     fun close() {
         for (client in listOf(localClient, remoteClient)) {
             client.dispatcher.cancelAll()

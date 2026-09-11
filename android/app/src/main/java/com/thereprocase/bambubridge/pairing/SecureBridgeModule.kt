@@ -86,7 +86,7 @@ class SecureBridgeModule(private val context: ReactApplicationContext) : ReactCo
         try {
             val transport = active ?: throw SecurityException()
             val target = url.toHttpUrl()
-            val client = transport.clientFor(target)
+            val client = transport.clientForRequest(target, method)
             require(method in setOf("GET", "POST", "PUT", "PATCH", "DELETE"))
             val request = Request.Builder().url(target)
             val keys = headers.keySetIterator()
