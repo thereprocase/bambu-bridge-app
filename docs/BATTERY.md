@@ -80,6 +80,12 @@ and [network update guidance](https://developer.android.com/develop/connectivity
 
 ## Device acceptance still required
 
+Operator rule for the connected development phone: enable Android's **Stay
+awake while charging** only while UI automation needs it. Turn it off when
+that work finishes; do not leave it enabled for read-only audits or battery
+measurements. Verify `settings get global stay_on_while_plugged_in` returns
+`0` at handoff.
+
 Use matched release builds on the same phone, with comparable charge, temperature,
 network and printer activity. Preserve pairing and app data, and capture existing
 battery history before any reset. Do not reconnect to or operate a printer just
