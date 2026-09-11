@@ -14,4 +14,31 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx tsc --noEmit
       - run: npm test -- --runInBand
-      - run: npx eslint src/viewing app/camera.tsx app/connection.tsx app/viewer.tsx 'app/(tabs)/status.tsx' app/settings.tsx app/_layout.tsx src/ws/live.ts --max-warnings=0
+      - run: npx eslint src/viewing src/store/live.ts src/store/snapshotCache.ts src/store/__tests__ app/camera.tsx app/connection.tsx app/viewer.tsx 'app/(tabs)/status.tsx' app/settings.tsx app/_layout.tsx src/ws/live.ts --max-warnings=0
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle
+            android/gradle.properties
+            android/gradle/wrapper/gradle-wrapper.properties
+            package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Compile Android and run native regression tests without release signing
+        working-directory: android
+        run: >-
+          bash ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+          --no-daemon --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m"
+          -PreactNativeArchitectures=arm64-v8a
