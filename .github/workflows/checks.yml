@@ -1,0 +1,17 @@
+name: Android app checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit
+      - run: npm test -- --runInBand
+      - run: npx eslint src/viewing app/camera.tsx app/connection.tsx app/viewer.tsx 'app/(tabs)/status.tsx' app/settings.tsx app/_layout.tsx src/ws/live.ts --max-warnings=0

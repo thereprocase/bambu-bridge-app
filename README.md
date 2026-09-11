@@ -2,12 +2,52 @@
 
 The Android companion for the self-hosted [Bambu Bridge](https://github.com/thereprocase/bambu-bridge) printer server.
 
+## Camera and print alerts preview
+
+**[Download Android 0.20.0](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.20.0)**
+adds full-rate camera streaming, fullscreen rotation and zoom, completed-job
+3D viewing, connection checks, and optional background print alerts. Use Bridge
+0.5.0 for the latest camera and viewer improvements. Install over your existing
+app to retain settings and pairing.
+
+| Want to… | Open… |
+|---|---|
+| Watch every available camera frame | Status; tap **Open fullscreen camera** to rotate and zoom |
+| Keep the display awake | Settings → **Keep screen awake** |
+| Inspect the last completed print | Status → **View in 3D**, while job data is available |
+| Receive completion, pause, and error alerts | Status → **Enable print alerts** |
+| Find a connection problem | Settings → **Check connection** |
+
+Print alerts use an opt-in Android foreground service with a persistent status
+notification and a Stop action. Allow the background connection when prompted
+for better delivery during deep sleep. The service uses your own bridge,
+retains verified local TLS pairing, and does not need a cloud push provider.
+See [what changed and the delivery limits](docs/RELEASE-0.20.0.md).
+
 **[Download Android v0.18.3](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.18.3)** · **[Project overview](https://thereprocase.github.io/bambu-bridge/#android)** · **[What changed](docs/RELEASE-0.18.3.md)**
 
 The APK supports ARM64 phones running Android 7 or newer. Use Bambu Bridge 0.1.3.
 Install it as an update to preserve your saved connection and printer settings.
 
 > Independent community software. Not affiliated with or endorsed by Bambu Lab.
+
+## Secure local pairing preview
+
+**[Android 0.19.0 preview](https://github.com/thereprocase/bambu-bridge-app/releases/tag/v0.19.0)**
+adds QR pairing with Bridge 0.2.0. In Settings, choose **Pair with QR code**, scan
+the code displayed by your bridge installer, and name your phone. Local API,
+camera, live status and the embedded viewer use encrypted connections that
+verify the bridge's paired identity. No domain, VPN or certificate installation
+is needed for local access. An HTTPS Tailscale address is optional for remote use.
+
+See the [pairing and recovery guide](https://github.com/thereprocase/bambu-bridge/blob/feature/local-pairing/docs/LOCAL-PAIRING.md).
+Existing manual HTTP connections remain available under **Manual setup / compatibility**.
+Paired credentials cannot fall back to HTTP. Disconnecting a paired phone in
+Settings revokes its credential; old manual settings remain stored separately.
+QR decoding is offline, uses ZXing, and does not save camera images.
+
+This preview has automated API, lifecycle and native TLS tests. Physical-phone
+QR scanning and paired WebView acceptance are pending; v0.18.3 remains the stable release.
 
 Bambu Bridge is a small server you run on your own machine (a home server, a
 Raspberry Pi, a spare PC) that talks to your Bambu Lab P1S over your LAN. This
