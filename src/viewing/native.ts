@@ -2,12 +2,13 @@ import { NativeModules, PermissionsAndroid, Platform } from "react-native";
 import { resolveEndpoint, otherUrlFor } from "../api/endpoint";
 import { useBridgeStore } from "../store/bridge";
 
-interface MonitorState { running: boolean; printer: string; state: string; alertsAllowed: boolean; batteryRestricted: boolean }
+interface MonitorState { running: boolean; homeAssistant: boolean; printer: string; state: string; alertsAllowed: boolean; batteryRestricted: boolean }
 interface ViewingModule {
   screenOptions(rotate: boolean, awake: boolean): void;
   startMonitor(config: string): Promise<void>;
   stopMonitor(): Promise<void>;
   monitorStatus(): Promise<MonitorState>;
+  setHomeAssistantAlerts(enabled: boolean): Promise<void>;
   batterySettings(): void;
 }
 export const viewingNative = NativeModules.BridgeViewing as ViewingModule;

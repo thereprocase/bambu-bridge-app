@@ -13,6 +13,7 @@
  */
 
 import { create } from "zustand";
+import { AppState } from "react-native";
 
 import { qaLog } from "../lib/qalog";
 import { applyDelta, LiveConnection, LiveMessage, LiveStatus } from "../ws/live";
@@ -217,7 +218,9 @@ export const useLiveStore = create<LiveStore>((set, get) => ({
         });
       },
     });
-    conn.start();
+    // A late bootstrap/selection effect must not open sockets after backgrounding.
+    // Keep the connection object: the foreground lifecycle starts it once on return.
+    if (AppState.currentState === "active") conn.start();
     set((s) => ({ conns: { ...s.conns, [printerId]: conn } }));
   },
 

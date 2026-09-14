@@ -1,6 +1,9 @@
 import { LiveConnection } from "../live";
 import { resolveBaseUrl, notifyRequestFailed } from "../../api/endpoint";
 
+const mockAppState = { currentState: "active" };
+jest.mock("react-native", () => ({ get AppState() { return mockAppState; } }));
+
 jest.mock("../../store/bridge", () => ({ useBridgeStore: { getState: () => ({ bearer: "synthetic-ws-secret", baseUrl: "http://bridge.invalid/api/v1", baseUrlLan: null }) } }));
 jest.mock("../../store/net", () => ({ useNetStore: { getState: () => ({ setReach: jest.fn() }) } }));
 jest.mock("../../lib/qalog", () => ({ qaLog: jest.fn() }));
@@ -30,9 +33,29 @@ function connection() {
   return { conn, onMessage, onStatus };
 }
 beforeEach(() => {
+  mockAppState.currentState = "active";
   jest.useFakeTimers(); jest.clearAllMocks(); MockSocket.instances = [];
   global.WebSocket = MockSocket as unknown as typeof WebSocket;
   jest.mocked(resolveBaseUrl).mockResolvedValue("http://bridge.invalid/api/v1");
+});
+
+it("does not reconnect a failed background socket until foreground resume", async () => {
+  const { conn } = connection(); await flush();
+  const socket = MockSocket.instances[0]; socket.onopen?.(); socket.emit({ type: "snapshot", data: {} });
+  mockAppState.currentState = "background";
+  socket.onclose?.({ code: 1006, reason: "lost" });
+  await jest.advanceTimersByTimeAsync(120_000);
+  expect(MockSocket.instances).toHaveLength(1);
+  mockAppState.currentState = "active"; conn.start(); await flush();
+  expect(MockSocket.instances).toHaveLength(2);
+});
+
+it("cancels a retry that becomes due after backgrounding", async () => {
+  connection(); await flush();
+  MockSocket.instances[0].onclose?.({ code: 1006, reason: "lost" });
+  mockAppState.currentState = "background";
+  await jest.advanceTimersByTimeAsync(120_000);
+  expect(MockSocket.instances).toHaveLength(1);
 });
 afterEach(() => {
   connections.splice(0).forEach((c) => c.stop());
@@ -53,9 +76,12 @@ it("waits for a valid fresh snapshot before enabling the live status", async () 
   expect(socket.options).toEqual({ headers: { Authorization: "Bearer synthetic-ws-secret" } });
 });
 
-it("answers server pings and stops its keepalive when closed", async () => {
+it("sends no unsolicited heartbeat, answers server pings, and stays silent after stop", async () => {
   const { conn } = connection(); await flush(); const socket = MockSocket.instances[0]; socket.onopen?.();
-  socket.emit({ type: "snapshot", data: {} }); socket.emit({ type: "ping" });
+  socket.emit({ type: "snapshot", data: {} });
+  await jest.advanceTimersByTimeAsync(30_000);
+  expect(socket.send).not.toHaveBeenCalled();
+  socket.emit({ type: "ping" });
   expect(socket.send).toHaveBeenCalledWith('{"type":"pong"}');
   conn.stop(); socket.send.mockClear(); await jest.advanceTimersByTimeAsync(60_000);
   expect(socket.send).not.toHaveBeenCalled();

@@ -2,6 +2,8 @@ import { kv } from "../../lib/kv";
 import { useLiveStore } from "../live";
 
 const mockConnections: { callbacks: any; start: jest.Mock; stop: jest.Mock }[] = [];
+const mockAppState = { currentState: "active" };
+jest.mock("react-native", () => ({ get AppState() { return mockAppState; } }));
 
 jest.mock("../../lib/kv", () => ({ kv: { getString: jest.fn(), set: jest.fn() } }));
 jest.mock("../../lib/qalog", () => ({ qaLog: jest.fn() }));
@@ -18,8 +20,15 @@ const mockKv = kv as unknown as { getString: jest.Mock; set: jest.Mock };
 
 describe("live snapshot persistence", () => {
   beforeEach(() => {
+    mockAppState.currentState = "active";
     jest.useFakeTimers(); jest.clearAllMocks(); mockConnections.length = 0;
     useLiveStore.getState().reset();
+  });
+  it("late bootstrap while hidden retains cached state without opening a socket", () => {
+    mockAppState.currentState = "background";
+    useLiveStore.getState().ensureConnection("p1");
+    expect(mockConnections[0].start).not.toHaveBeenCalled();
+    expect(useLiveStore.getState().conns.p1).toBeDefined();
   });
   afterEach(() => { useLiveStore.getState().reset(); jest.useRealTimers(); });
 
