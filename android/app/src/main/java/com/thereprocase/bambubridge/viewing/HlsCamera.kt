@@ -34,7 +34,9 @@ class HlsCamera(
     private var videoHeight = 720
     private val closed = AtomicBoolean(false)
     private val player = ExoPlayer.Builder(context)
-        .setBandwidthMeter(DefaultBandwidthMeter.Builder(context).setInitialBitrateEstimate(600_000L).build())
+        // Use Media3's network-aware estimates and retain learned throughput
+        // across inline/fullscreen views instead of restarting at 600 kb/s.
+        .setBandwidthMeter(DefaultBandwidthMeter.getSingletonInstance(context))
         .setTrackSelector(DefaultTrackSelector(context, AdaptiveTrackSelection.Factory(1500, 4000, 1500, 0.7f)))
         .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(2000, 6000, 500, 1000).build())
         .build()
