@@ -12,7 +12,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import okhttp3.HttpUrl
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -29,11 +33,16 @@ class HlsCamera(
     private var videoWidth = 1280
     private var videoHeight = 720
     private val closed = AtomicBoolean(false)
-    private val player = ExoPlayer.Builder(context).build()
+    private val player = ExoPlayer.Builder(context)
+        .setBandwidthMeter(DefaultBandwidthMeter.Builder(context).setInitialBitrateEstimate(600_000L).build())
+        .setTrackSelector(DefaultTrackSelector(context, AdaptiveTrackSelection.Factory(1500, 4000, 1500, 0.7f)))
+        .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(2000, 6000, 500, 1000).build())
+        .build()
     @Volatile private var lastFrame = SystemClock.elapsedRealtime()
     private var windowAt = lastFrame
     private var frames = 0
     private var first = true
+    private var liveRecoveries = 0
     private val watchdog = object : Runnable {
         override fun run() {
             if (closed.get()) return
@@ -52,7 +61,7 @@ class HlsCamera(
         }.build()
         val source = HlsMediaSource.Factory(OkHttpDataSource.Factory(client)).createMediaSource(
             MediaItem.Builder().setUri(url.toString()).setLiveConfiguration(
-                MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(1500).build()).build())
+                MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(3000).build()).build())
         player.setVideoTextureView(texture)
         player.addListener(object : Player.Listener {
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -60,6 +69,12 @@ class HlsCamera(
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.w("BridgeVideo", "playerError=${error.errorCodeName}")
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW && liveRecoveries < 2) {
+                    liveRecoveries++
+                    lastFrame = SystemClock.elapsedRealtime()
+                    player.seekToDefaultPosition(); player.prepare()
+                    return
+                }
                 fail(ViewingTransport.failure(error))
             }
             override fun onPlaybackStateChanged(state: Int) {
@@ -68,7 +83,7 @@ class HlsCamera(
         })
         player.setVideoFrameMetadataListener { _, _, _, _ ->
             val now = SystemClock.elapsedRealtime()
-            lastFrame = now; frames++
+            lastFrame = now; frames++; liveRecoveries = 0
             if (first || now - windowAt >= 1000) {
                 val fps = if (now > windowAt) frames * 1000.0 / (now - windowAt) else 0.0
                 val initial = first; first = false; frames = 0; windowAt = now
