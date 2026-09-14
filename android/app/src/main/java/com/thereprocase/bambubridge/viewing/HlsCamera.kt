@@ -2,6 +2,7 @@ package com.thereprocase.bambubridge.viewing
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import android.view.Gravity
 import android.view.TextureView
 import android.widget.FrameLayout
@@ -58,6 +59,7 @@ class HlsCamera(
                 videoWidth = size.width; videoHeight = size.height; fit()
             }
             override fun onPlayerError(error: PlaybackException) {
+                Log.w("BridgeVideo", "playerError=${error.errorCodeName}")
                 fail(ViewingTransport.failure(error))
             }
             override fun onPlaybackStateChanged(state: Int) {
@@ -80,11 +82,13 @@ class HlsCamera(
     private fun fail(state: String) {
         if (!closed.get()) { close(); failure(state) }
     }
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) { fit() }
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) { fit() }
     private fun fit() {
         if (width <= 0 || height <= 0 || videoWidth <= 0 || videoHeight <= 0) return
         val factor = minOf(width.toFloat()/videoWidth, height.toFloat()/videoHeight)
-        texture.layoutParams = LayoutParams((videoWidth*factor).toInt(), (videoHeight*factor).toInt(), Gravity.CENTER)
+        val w = (videoWidth * factor).toInt()
+        val h = (videoHeight * factor).toInt()
+        texture.layout((width - w) / 2, (height - h) / 2, (width + w) / 2, (height + h) / 2)
     }
     fun close() {
         if (closed.getAndSet(true)) return

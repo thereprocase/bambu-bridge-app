@@ -93,6 +93,19 @@ class CameraView(private val react: ThemedReactContext) : FrameLayout(react), Li
         video?.let { it.close(); removeView(it) }; video = null
         picture.visibility = VISIBLE
     }
+    // React Native owns this host's layout and does not run another native
+    // layout pass merely because an asynchronously created child was added.
+    private fun layoutVideo() {
+        video?.let {
+            it.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+            it.layout(0, 0, width, height)
+        }
+    }
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        layoutVideo()
+    }
     private fun startHls(current: Int, encoded: String) {
         worker.execute {
             val transport = try { ViewingTransport(JSONObject(encoded)) }
@@ -114,7 +127,7 @@ class CameraView(private val react: ThemedReactContext) : FrameLayout(react), Li
                     if (generation != current || !active) { transport.close(); return@post }
                     try {
                         video = HlsCamera(react, transport, url,
-                            { fps, w, h -> emit("frame", current, fps, w, h) },
+                            { fps, w, h -> emit("frame", current, fps, w, h, "hls") },
                             { state ->
                                 if (generation == current) {
                                     closeVideo()
@@ -124,6 +137,7 @@ class CameraView(private val react: ThemedReactContext) : FrameLayout(react), Li
                             })
                         picture.visibility = GONE
                         addView(video, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+                        layoutVideo()
                         transform()
                     } catch (e: Exception) {
                         transport.close(); emit(ViewingTransport.failure(e), current)
@@ -185,12 +199,13 @@ class CameraView(private val react: ThemedReactContext) : FrameLayout(react), Li
             finally { transport?.close() }
         }
     }
-    private fun emit(state: String, current: Int = generation, fps: Double = 0.0, width: Int = 0, height: Int = 0) {
+    private fun emit(state: String, current: Int = generation, fps: Double = 0.0, width: Int = 0, height: Int = 0, transport: String = "jpeg") {
         post {
             if (current != generation) return@post
             UIManagerHelper.getEventDispatcherForReactTag(react, id)?.dispatchEvent(CameraEvent(
                 UIManagerHelper.getSurfaceId(this), id, Arguments.createMap().apply {
                     putString("state",state); putDouble("fps",fps); putInt("width",width); putInt("height",height)
+                    putString("transport", transport)
                 }))
         }
     }
